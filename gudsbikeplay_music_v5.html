@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="hi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#09090d">
+<title>Gud's BikePlay</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.css">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.js"></script>
+<style>
+*,*::before,*::after{box-sizing:border-box}
+html,body{height:100%;margin:0;overflow:hidden;background:#09090d;color:#fdfdff;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,system-ui,sans-serif;-webkit-tap-highlight-color:transparent;user-select:none}
+body::before{content:"";position:fixed;inset:-12%;z-index:-2;background:
+  radial-gradient(38% 32% at 16% 10%,#ff9a5a 0%,transparent 68%),
+  radial-gradient(34% 30% at 82% 8%,#8f6bff 0%,transparent 70%),
+  radial-gradient(40% 34% at 88% 74%,#ff5f9e 0%,transparent 68%),
+  radial-gradient(42% 36% at 8% 84%,#2ad1c9 0%,transparent 70%),
+  linear-gradient(160deg,#241c3a 0%,#120f22 52%,#07060e 100%);filter:blur(52px) saturate(1.15);opacity:.9}
+button{font:inherit;color:inherit;background:none;border:0;cursor:pointer;padding:0}
+
+.glass{background:linear-gradient(170deg,rgba(255,255,255,.16),rgba(255,255,255,.05));border:1px solid rgba(255,255,255,.2);
+  backdrop-filter:blur(30px) saturate(180%);-webkit-backdrop-filter:blur(30px) saturate(180%);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.4),0 20px 50px -30px #000}
+
+/* Portrait me landscape ka message */
+#rotate{display:none;position:fixed;inset:0;z-index:50;background:#09090d;align-items:center;justify-content:center;flex-direction:column;gap:14px;text-align:center;padding:20px}
+#rotate .ph{font-size:56px;transform:rotate(-90deg)}
+@media (orientation:portrait){#rotate{display:flex}}
+
+/* Layout: upar 70% map, beech 10% time-date, neeche 20% player */
+.app{position:fixed;inset:0;display:grid;grid-template-columns:7fr 3fr;grid-template-rows:100%;gap:8px;padding:8px;padding-top:calc(8px + env(safe-area-inset-top,0px));padding-bottom:calc(8px + env(safe-area-inset-bottom,0px))}
+.side{display:grid;grid-template-rows:auto 1fr;gap:8px;min-width:0;min-height:0}
+
+.map-card{position:relative;border-radius:24px;overflow:hidden;min-height:0}
+#map{position:absolute;inset:0;background:#1a2230}
+.leaflet-control-attribution{font-size:9px!important;background:rgba(0,0,0,.4)!important;color:#ccc!important}
+
+.clock{position:relative;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:2px;padding:6px 10px;border-radius:20px;min-height:0}
+.fs{position:absolute;top:6px;right:6px;width:34px;height:34px;border-radius:10px;background:rgba(255,255,255,.14);border:1px solid rgba(255,255,255,.22);color:#fff;font-size:16px;display:grid;place-items:center}
+.fs:active{transform:scale(.94)}
+#time{font-size:clamp(28px,5vh,42px);font-weight:700;letter-spacing:-.02em;font-variant-numeric:tabular-nums;line-height:1.05}
+#date{font-size:12px;color:rgba(255,255,255,.7);text-align:center}
+
+.player{position:relative;display:flex;flex-direction:column;justify-content:center;gap:10px;padding:12px;border-radius:24px;min-height:0;overflow:hidden}
+.now{display:flex;align-items:center;gap:10px;min-width:0}
+.progress{position:absolute;left:0;right:0;bottom:0;height:3px;background:rgba(255,255,255,.12)}
+#bar{display:block;height:100%;width:0;background:linear-gradient(90deg,#ffb457,#ff6a4d)}
+.art{flex:0 0 auto;width:48px;height:48px;border-radius:12px;display:grid;place-items:center;overflow:hidden;background:rgba(255,255,255,.12);font-size:22px}
+.art img{width:100%;height:100%;object-fit:cover}
+.meta{flex:1;min-width:0;display:flex;flex-direction:column;gap:2px}
+#title{font-size:15px;font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+#artist{font-size:12px;color:rgba(255,255,255,.66);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+
+.play{flex:0 0 auto;width:54px;height:54px;border-radius:50%;display:grid;place-items:center;color:#22110a;background:linear-gradient(150deg,#ffd39a,#ffb457 45%,#ff6a4d);box-shadow:inset 0 1px 0 rgba(255,255,255,.75),0 10px 22px -12px rgba(255,145,90,.9)}
+.play svg{width:22px;height:22px}
+.play:active{transform:scale(.94)}
+
+.moods{flex:0 0 auto;display:grid;grid-template-columns:1fr 1fr;gap:8px}
+.mood{padding:9px 6px;border-radius:99px;text-align:center;font-size:13px;font-weight:600;background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.2);color:rgba(255,255,255,.85);white-space:nowrap}
+.mood[aria-pressed="true"]{background:linear-gradient(180deg,#ffb38a,#ff5f9e);color:#1a1420;border-color:transparent}
+.mood:active{transform:scale(.95)}
+
+.route{position:absolute;top:10px;left:10px;right:10px;z-index:500;display:flex;gap:6px;align-items:center;padding:6px;border-radius:16px;background:rgba(15,12,25,.78);border:1px solid rgba(255,255,255,.2);backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.route input{flex:1;min-width:0;padding:9px 12px;border-radius:12px;border:1px solid rgba(255,255,255,.2);background:rgba(255,255,255,.08);color:#fff;font-size:16px;outline:none}
+.route button{padding:9px 14px;border-radius:12px;background:linear-gradient(180deg,#ffb38a,#ff5f9e);color:#1a1420;font-weight:700;font-size:14px}
+.sugg{position:absolute;top:58px;left:10px;right:10px;z-index:600;max-height:60%;overflow-y:auto;background:rgba(15,12,25,.94);border:1px solid rgba(255,255,255,.2);border-radius:14px;backdrop-filter:blur(20px);-webkit-backdrop-filter:blur(20px)}
+.sugg[hidden]{display:none}
+.sugg button{display:block;width:100%;text-align:left;padding:10px 14px;font-size:14px;color:#fff;border-bottom:1px solid rgba(255,255,255,.08)}
+.sugg button:last-child{border-bottom:0}
+.sugg span{display:block;font-weight:600}
+.sugg small{display:block;color:rgba(255,255,255,.55);font-size:11px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.recenter{position:absolute;left:12px;bottom:12px;z-index:500;width:46px;height:46px;border-radius:50%;background:rgba(15,12,25,.85);border:1px solid rgba(255,255,255,.25);color:#fff;font-size:22px;display:grid;place-items:center}
+.recenter:active{transform:scale(.94)}
+#here{font-size:11px;color:rgba(255,255,255,.75);text-align:center;margin-top:4px;padding:0 6px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+#routeMsg{font-size:12px;color:#ffd7c7;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis}
+#toast{position:fixed;left:50%;bottom:14px;transform:translateX(-50%) translateY(20px);opacity:0;transition:.3s;background:rgba(15,12,25,.9);border:1px solid rgba(255,255,255,.2);padding:9px 14px;border-radius:12px;font-size:13px;z-index:40;pointer-events:none;max-width:90vw}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+</style>
+</head>
+<body>
+
+<div id="rotate"><div class="ph">📱</div><div>Phone ko landscape (aadha ghuma kar) karo</div></div>
+
+<div class="app">
+  <section class="map-card glass">
+    <div id="map"></div>
+    <form class="route" id="routeForm" autocomplete="off">
+      <input id="destInput" type="search" placeholder="Kahan jana hai?" enterkeyhint="go">
+      <button type="submit">Go</button>
+      <span id="routeMsg"></span>
+    </form>
+    <div class="sugg" id="sugg" hidden></div>
+    <button class="recenter" id="recenter" type="button" aria-label="Meri location par jao">◎</button>
+  </section>
+
+  <div class="side">
+    <header class="clock glass">
+      <button class="fs" id="fsBtn" type="button" aria-label="Full screen">⛶</button>
+      <div id="time">--:--</div>
+      <div id="date"></div>
+      <div id="here">Location dhoond rahe hain...</div>
+    </header>
+
+    <footer class="player glass">
+      <div class="now">
+        <div class="art" id="art">♪</div>
+        <div class="meta">
+          <div id="title">Mood chuno</div>
+          <div id="artist">Drive · Lofi · Chill · Energy</div>
+        </div>
+        <button class="play" id="playBtn" aria-label="Play ya pause"></button>
+      </div>
+      <div class="moods">
+        <button class="mood" data-mood="drive" aria-pressed="false">Drive</button>
+        <button class="mood" data-mood="lofi" aria-pressed="false">Lofi</button>
+        <button class="mood" data-mood="chill" aria-pressed="false">Chill</button>
+        <button class="mood" data-mood="energy" aria-pressed="false">Energy</button>
+      </div>
+      <div class="progress"><span id="bar"></span></div>
+    </footer>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+/* ---------------- helpers ---------------- */
+const $ = (id) => document.getElementById(id);
+const PLAY_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><path d="M8.2 5.7v12.6c0 .9 1 1.4 1.7.9l9-6.3a1.1 1.1 0 0 0 0-1.8l-9-6.3c-.7-.5-1.7 0-1.7.9z"/></svg>';
+const PAUSE_SVG = '<svg viewBox="0 0 24 24" fill="currentColor"><rect x="6" y="5" width="4.5" height="14" rx="1.2"/><rect x="13.5" y="5" width="4.5" height="14" rx="1.2"/></svg>';
+
+let toastTimer = null;
+function toast(msg) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.classList.add("show");
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove("show"), 2600);
+}
+
+function clean(s) {
+  return String(s || "").replace(/&quot;/g, '"').replace(/&amp;/g, "&").replace(/&#039;|&#39;/g, "'");
+}
+function shuffle(list) {
+  for (let i = list.length - 1; i > 0; i -= 1) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [list[i], list[j]] = [list[j], list[i]];
+  }
+  return list;
+}
+
+/* ---------------- moods (aapki list se) ---------------- */
+const MOODS = {
+  drive: {
+    queries: ["hindi party songs", "punjabi party songs", "bollywood party songs", "dance party songs", "party songs"],
+  },
+  lofi: {
+    queries: ["lofi songs", "hindi lofi songs", "lofi remix hindi", "bollywood lofi", "punjabi lofi", "lofi slowed reverb hindi"],
+    rx: /lo-?fi/i, // title ya album me lofi hona chahiye
+  },
+  chill: {
+    queries: ["Arijit Singh romantic songs 2026", "Jubin Nautiyal hits 2026", "Shreya Ghoshal romantic 2025", "Mohit Chauhan songs", "Atif Aslam romantic 2025", "Pritam hits 2026"],
+  },
+  energy: {
+    queries: ["gym workout songs", "bass boosted songs", "gym motivation songs", "workout hindi songs", "hindi gym songs", "punjabi gym songs"],
+  },
+};
+
+/* ---------------- music source (aapki app wala catalogue) ---------------- */
+function normalize(entry) {
+  const images = Array.isArray(entry.image) ? entry.image : [];
+  const art = (images.find((i) => i.quality === "500x500") || images[images.length - 1] || {}).url || "";
+  const downloads = Array.isArray(entry.downloadUrl) ? entry.downloadUrl : [];
+  const q = (x) => parseInt(String(x.quality).replace(/\D/g, ""), 10) || 0;
+  const best = downloads.slice().sort((a, b) => q(b) - q(a))[0] || {};
+  const artists = (entry.artists && entry.artists.primary) || [];
+  return {
+    id: entry.id || "",
+    title: clean(entry.name),
+    artist: artists.map((a) => clean(a && a.name)).filter(Boolean).slice(0, 2).join(", ") || "Unknown",
+    album: clean(entry.album && entry.album.name),
+    art,
+    url: best.url || "",
+  };
+}
+
+async function getJSON(url, timeout = 12000) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeout);
+  try {
+    const res = await fetch(url, { headers: { Accept: "application/json" }, cache: "no-store", signal: controller.signal });
+    if (!res.ok) throw new Error("HTTP " + res.status);
+    return await res.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function fetchSongs(query, limit = 20, page = 1) {
+  const enc = encodeURIComponent(query);
+
+  // 1) Same-origin proxy (Cloudflare Worker / server) 2) hosted proxy
+  for (const origin of ["", "https://gud-s-music-64n394-preview.freebuff.site"]) {
+    try {
+      const body = await getJSON(`${origin}/api/search?q=${enc}&limit=${limit}&page=${page}`);
+      if (Array.isArray(body.items) && body.items.length) return body.items;
+    } catch (e) { /* next */ }
+  }
+
+  // 3) Catalogue seedha, phir public CORS relay
+  const target = `https://saavn.sumit.co/api/search/songs?query=${enc}&limit=${limit}&page=${page}`;
+  for (const url of [target, `https://api.allorigins.win/raw?url=${encodeURIComponent(target)}`]) {
+    try {
+      const body = await getJSON(url);
+      const songs = ((body.data && body.data.results) || []).map(normalize).filter((s) => s.url && s.title);
+      if (songs.length) return songs;
+    } catch (e) { /* next */ }
+  }
+  throw new Error("catalogue unreachable");
+}
+
+/* ---------------- player state ---------------- */
+const audio = new Audio();
+audio.preload = "auto";
+const state = { queue: [], index: -1, mood: null, seen: new Set(), pending: null };
+
+// Ek mood ke liye naye gaane queue me daalo (ek hi time par ek hi request)
+function loadMore() {
+  if (state.pending) return state.pending;
+  const mood = state.mood;
+  if (!mood) return Promise.resolve();
+  state.pending = (async () => {
+    const m = MOODS[mood];
+    const query = m.queries[Math.floor(Math.random() * m.queries.length)];
+    const page = 1 + Math.floor(Math.random() * 3);
+    let songs = await fetchSongs(query, 20, page);
+    if (m.rx) {
+      const hit = songs.filter((s) => m.rx.test(`${s.title} ${s.album}`));
+      if (hit.length >= 3) songs = hit;
+    }
+    songs = songs.filter((s) => s.id && !state.seen.has(s.id));
+    shuffle(songs).forEach((s) => state.seen.add(s.id));
+    if (state.mood === mood) state.queue.push(...songs);
+  })().finally(() => { state.pending = null; });
+  return state.pending;
+}
+
+async function playMood(mood) {
+  state.mood = mood;
+  state.queue = [];
+  state.index = -1;
+  state.seen = new Set();
+  setChips();
+  setNowText("Gaane load ho rahe hain...", MOODS[mood] ? mood.charAt(0).toUpperCase() + mood.slice(1) : "");
+  try {
+    await loadMore();
+    if (!state.queue.length) throw new Error("empty");
+    playAt(0);
+  } catch (e) {
+    setNowText("Gaane load nahi hue", "Internet check karo, phir try karo");
+    toast("Internet check karo, phir mood dabao");
+  }
+}
+
+function playAt(i) {
+  const track = state.queue[i];
+  if (!track) return;
+  state.index = i;
+  audio.src = track.url;
+  audio.play().catch(() => toast("Play dabao"));
+  showTrack(track);
+  if (state.queue.length - i <= 3) loadMore().catch(() => {});
+}
+
+async function next() {
+  if (state.index + 1 < state.queue.length) return playAt(state.index + 1);
+  try {
+    await loadMore();
+    if (state.index + 1 < state.queue.length) playAt(state.index + 1);
+    else toast("Agla gaana nahi mila");
+  } catch (e) {
+    toast("Agla gaana load nahi hua");
+  }
+}
+
+function togglePlay() {
+  if (state.index < 0) return playMood(state.mood || "chill");
+  if (audio.paused) audio.play().catch(() => {});
+  else audio.pause();
+}
+
+/* ---------------- UI ---------------- */
+function showTrack(track) {
+  $("title").textContent = track.title;
+  $("artist").textContent = track.artist;
+  $("art").innerHTML = track.art ? `<img src="${track.art}" alt="">` : "♪";
+}
+function setNowText(title, sub) {
+  $("title").textContent = title;
+  $("artist").textContent = sub;
+}
+function setChips() {
+  document.querySelectorAll(".mood").forEach((b) => {
+    b.setAttribute("aria-pressed", String(b.dataset.mood === state.mood));
+  });
+}
+function setPlayIcon(playing) {
+  $("playBtn").innerHTML = playing ? PAUSE_SVG : PLAY_SVG;
+}
+
+document.querySelectorAll(".mood").forEach((btn) => {
+  btn.addEventListener("click", () => playMood(btn.dataset.mood));
+});
+$("playBtn").addEventListener("click", togglePlay);
+setPlayIcon(false);
+
+audio.addEventListener("play", () => setPlayIcon(true));
+audio.addEventListener("pause", () => setPlayIcon(false));
+audio.addEventListener("ended", () => next());
+audio.addEventListener("timeupdate", () => {
+  if (audio.duration) $("bar").style.width = (audio.currentTime / audio.duration * 100) + "%";
+});
+audio.addEventListener("error", () => {
+  if (state.index >= 0) {
+    toast("Ye gaana nahi chala, agla try karte hain");
+    next();
+  }
+});
+
+/* ---------------- clock ---------------- */
+function tick() {
+  const now = new Date();
+  $("time").textContent = now.toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", hour12: false });
+  $("date").textContent = now.toLocaleDateString("en-IN", { weekday: "short", day: "numeric", month: "short", year: "numeric" });
+}
+tick();
+setInterval(tick, 1000);
+
+/* ---------------- map (OpenStreetMap, API key ki zarurat nahi) ---------------- */
+const map = L.map("map", { zoomControl: false }).setView([20.5937, 78.9629], 5);
+L.control.zoom({ position: "bottomright" }).addTo(map);
+// Free road map, bina API key ke (Esri World Street Map). Google/Apple ka map free embed nahi hota.
+L.tileLayer("https://server.arcgisonline.com/ArcGIS/rest/services/World_Street_Map/MapServer/tile/{z}/{y}/{x}", {
+  maxZoom: 19,
+  attribution: "Tiles © Esri, OpenStreetMap",
+}).addTo(map).on("tileerror", () => {
+  if (tileWarned) return;
+  tileWarned = true;
+  toast("Map ki tiles nahi aayi. File ko https par host karo, ya browser ka Shield/ad-block band karo");
+});
+let tileWarned = false;
+
+let here = null; // aapki current location [lat, lng]
+let accCircle = null; // GPS kitna sahi hai, uska gol ghera
+let meMarker = null;
+let centered = false;
+// Location sirf https ya localhost par milti hai. File:// se khulne par browser location nahi deta.
+if (!window.isSecureContext) {
+  $("here").textContent = "⚠ Location ke liye file ko https par kholo";
+}
+if ("geolocation" in navigator) {
+  navigator.geolocation.watchPosition(
+    (pos) => {
+      const acc = pos.coords.accuracy || 9999;
+      // Kharab (bahut door ki) fix ko ignore karo, jab tak achhi fix na mile
+      if (centered && acc > 100) return;
+      const ll = [pos.coords.latitude, pos.coords.longitude];
+      here = ll;
+      if (!centered) lastAddrAt = 0;
+      updateHere(ll);
+      if (accCircle) map.removeLayer(accCircle);
+      accCircle = L.circle(ll, { radius: acc, color: "#4da3ff", weight: 1, fillColor: "#4da3ff", fillOpacity: 0.12 }).addTo(map);
+      if (!meMarker) {
+        meMarker = L.circleMarker(ll, { radius: 9, color: "#ffffff", weight: 3, fillColor: "#4da3ff", fillOpacity: 1 }).addTo(map);
+      } else {
+        meMarker.setLatLng(ll);
+      }
+      if (!centered) {
+        map.setView(ll, 15);
+        centered = true;
+      }
+    },
+    (err) => {
+      const reason = {
+        1: "Location permission band hai. Browser ki settings me Location Allow karo",
+        2: "GPS signal nahi mil raha. Phone ka Location (GPS) on karo",
+        3: "Location dhoondne me time lag gaya, thodi der baad try karo",
+      }[err.code] || "Location nahi mili";
+      $("here").textContent = "⚠ " + reason;
+      toast(reason);
+    },
+    { enableHighAccuracy: true, maximumAge: 5000 }
+  );
+}
+
+/* ---------------- kahan se kahan (route) ---------------- */
+let routeLine = null;
+let destMarker = null;
+
+function setRouteMsg(text) {
+  $("routeMsg").textContent = text;
+}
+
+async function goRoute(query) {
+  if (!query) return toast("Kahan jana hai, wo likho");
+  if (!here) return toast("Pehle location permission do");
+  setRouteMsg("Dhund rahe hain...");
+  try {
+    // 1) Jagah ka naam -> coordinates (OpenStreetMap Nominatim, bina API key)
+    const geo = await getJSON(`https://nominatim.openstreetmap.org/search?format=json&limit=1&q=${encodeURIComponent(query)}`);
+    if (!geo.length) {
+      setRouteMsg("");
+      return toast("Ye jagah nahi mili");
+    }
+    return routeTo([parseFloat(geo[0].lat), parseFloat(geo[0].lon)]);
+  } catch (e) {
+    setRouteMsg("");
+    toast("Route load nahi hua, internet check karo");
+  }
+}
+
+async function routeTo(dest) {
+  hideSugg();
+  if (!here) return toast("Pehle location permission do");
+  setRouteMsg("Route bana rahe hain...");
+  try {
+
+    // 2) Current location se destination tak route (OSRM, bina API key)
+    const url = `https://router.project-osrm.org/route/v1/driving/${here[1]},${here[0]};${dest[1]},${dest[0]}?overview=full&geometries=geojson`;
+    const data = await getJSON(url);
+    if (!data.routes || !data.routes.length) {
+      setRouteMsg("");
+      return toast("Route nahi mila");
+    }
+    const route = data.routes[0];
+    const latlngs = route.geometry.coordinates.map((c) => [c[1], c[0]]);
+
+    if (routeLine) map.removeLayer(routeLine);
+    if (destMarker) map.removeLayer(destMarker);
+    routeLine = L.polyline(latlngs, { color: "#ffb457", weight: 6, opacity: 0.9 }).addTo(map);
+    destMarker = L.marker(dest).addTo(map);
+    map.fitBounds(routeLine.getBounds(), { padding: [40, 40] });
+
+    setRouteMsg(`${(route.distance / 1000).toFixed(1)} km · ${Math.round(route.duration / 60)} min`);
+  } catch (e) {
+    setRouteMsg("");
+    toast("Route load nahi hua, internet check karo");
+  }
+}
+
+$("routeForm").addEventListener("submit", (event) => {
+  event.preventDefault();
+  goRoute($("destInput").value.trim());
+});
+
+/* ---------------- meri location ka address ---------------- */
+let lastAddrAt = 0;
+async function updateHere(ll) {
+  if (Date.now() - lastAddrAt < 30000) return; // har GPS fix par nahi, 30 second me ek baar
+  lastAddrAt = Date.now();
+  try {
+    const d = await getJSON(`https://nominatim.openstreetmap.org/reverse?format=json&zoom=16&lat=${ll[0]}&lon=${ll[1]}`);
+    const a = d.address || {};
+    const parts = [
+      a.road || a.neighbourhood || a.suburb,
+      a.city || a.town || a.village || a.suburb || a.county,
+      a.state,
+    ].filter(Boolean);
+    const unique = [...new Set(parts)];
+    $("here").textContent = "📍 " + (unique.join(", ") || d.display_name || "Location mili");
+  } catch (e) {
+    /* address nahi mila, location dot phir bhi dikhega */
+  }
+}
+
+/* ---------------- search suggestions (Google Maps jaisa) ---------------- */
+let suggTimer = null;
+let suggSeq = 0;
+
+function hideSugg() {
+  $("sugg").hidden = true;
+}
+
+function renderSugg(list) {
+  const box = $("sugg");
+  box.innerHTML = "";
+  if (!list.length) return hideSugg();
+  list.forEach((item) => {
+    const parts = item.display_name.split(",").map((s) => s.trim());
+    const btn = document.createElement("button");
+    btn.type = "button";
+    const title = document.createElement("span");
+    title.textContent = parts.slice(0, 2).join(", ");
+    const sub = document.createElement("small");
+    sub.textContent = parts.slice(2, 5).join(", ");
+    btn.append(title, sub);
+    btn.addEventListener("click", () => {
+      $("destInput").value = parts[0];
+      routeTo([parseFloat(item.lat), parseFloat(item.lon)]);
+    });
+    box.appendChild(btn);
+  });
+  box.hidden = false;
+}
+
+async function loadSugg(q) {
+  const seq = ++suggSeq;
+  let url = `https://nominatim.openstreetmap.org/search?format=json&limit=5&q=${encodeURIComponent(q)}`;
+  if (here) {
+    // aapke aas-paas ki jagahon ko pehle dikhao
+    const d = 0.8;
+    url += `&viewbox=${here[1] - d},${here[0] + d},${here[1] + d},${here[0] - d}&bounded=0`;
+  }
+  try {
+    const list = await getJSON(url);
+    if (seq === suggSeq) renderSugg(list);
+  } catch (e) {
+    if (seq === suggSeq) hideSugg();
+  }
+}
+
+$("destInput").addEventListener("input", () => {
+  clearTimeout(suggTimer);
+  const q = $("destInput").value.trim();
+  if (q.length < 3) return hideSugg();
+  suggTimer = setTimeout(() => loadSugg(q), 450);
+});
+
+/* ---------------- recenter ---------------- */
+$("recenter").addEventListener("click", () => {
+  if (here) map.setView(here, 16);
+  else toast("Location abhi mili nahi");
+});
+
+/* ---------------- full screen ---------------- */
+$("fsBtn").addEventListener("click", async () => {
+  try {
+    if (!document.fullscreenElement) {
+      await document.documentElement.requestFullscreen();
+      if (screen.orientation && screen.orientation.lock) {
+        await screen.orientation.lock("landscape").catch(() => {});
+      }
+    } else {
+      await document.exitFullscreen();
+    }
+  } catch (e) {
+    toast("Full screen is browser me support nahi hai");
+  }
+});
+
+// Layout badalne par map ka size theek karo
+window.addEventListener("resize", () => map.invalidateSize());
+setTimeout(() => map.invalidateSize(), 300);
+</script>
+</body>
+</html>
